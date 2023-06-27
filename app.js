@@ -1,6 +1,8 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
+const _ = require("lodash");
+
 const app = express();
 
 app.set('view engine', 'ejs');
@@ -18,21 +20,28 @@ const itemsSchema = {
 
 const Item = mongoose.model("item", itemsSchema);
 
+const listSchema = {
+    name: String,
+    items: [itemsSchema] 
+};
+
+const List = mongoose.model("list", listSchema);
+
+const item1 = new Item({
+    name: "Welcome to your todolist!",
+  });
+
+const item2 = new Item({
+    name: "Hit the + button to add a new item.",
+});
+
+const item3 = new Item({
+    name: "<-- hit this to delete an item.",
+});
+
+const defaultItems = [item1, item2, item3];
+
 function initializeDatabase() {
-    const item1 = new Item({
-      name: "Welcome to your todolist!",
-    });
-  
-    const item2 = new Item({
-      name: "Hit the + button to add a new item.",
-    });
-  
-    const item3 = new Item({
-      name: "<-- hit this to delete an item.",
-    });
-  
-    const defaultItems = [item1, item2, item3];
-  
     return new Promise((resolve, reject) => {
       Item.insertMany(defaultItems)
         .then(() => {
@@ -46,25 +55,20 @@ function initializeDatabase() {
     });
   }  
 
-function renderList(res, items) {
+function renderList(res, listName, items) {
     res.render("list", {
-        listTitle: "Today",
+        listTitle: listName,
         newListItems: items
     });
 }
 
-// Define a variable to keep track of whether the database has been initialized
-let isDatabaseInitialized = false;
-
 app.get("/", function (req, res) {
   Item.find().then(function (foundItems) {
-    if (!isDatabaseInitialized || foundItems.length === 0) {
+    if (foundItems.length === 0) {
       initializeDatabase()
         .then(function () {
-          // Update the flag to indicate that the database has been initialized
-          isDatabaseInitialized = true;
           Item.find().then(function (items) {
-            renderList(res, items);
+            renderList(res, "Today", items);
           });
         })
         .catch(function (err) {
@@ -72,7 +76,7 @@ app.get("/", function (req, res) {
           res.status(500).send("Error initializing database");
         });
     } else {
-      renderList(res, foundItems);
+      renderList(res, "Today", foundItems);
     }
   }).catch(function (err) {
     console.log(err);
@@ -80,31 +84,112 @@ app.get("/", function (req, res) {
   });
 });
 
-
 app.post("/", function (req, res) {
-    let item = req.body.newItem;
-    if (req.body.list === "Work") {
-        workItems.push(item);
-        res.redirect("/work");
-    } else {
-        items.push(item);
-        res.redirect("/");
-    }
-
-});
-
-app.get("/work", function (req, res) {
-    res.render("list", {
-        listTitle: "Work List",
-        newListItems: workItems
+    const listName = req.body.list;
+    const itemName = req.body.newItem;
+    const item = new Item({
+        name: itemName
     });
+
+    if (listName === "Today") {
+        item.save().then(function(savedDocument) {
+            console.log('Document saved successfully:', savedDocument);
+            res.redirect("/");
+        }).catch(function(error) {
+            console.error(error);
+        }); 
+    } else {
+        List.findOne({name: listName}).then(function (foundList) {
+            foundList.items.push(item);
+            foundList.save().then(function (savedDocument) {
+                console.log(`The item was succesfully save to ${listName} list`);
+                res.redirect("/" + listName);
+            }).catch(function (err) {
+                console.error(err);
+            });
+        });
+    }
 });
 
-app.post("/work", function (req, res) {
-    let item = req.body.newItem;
-    workItems.push(item);
+app.post("/delete", function (req, res) {
+    const listName = req.body.listName;
+    const checkedItemId = req.body.checkbox;
+  
+    if (listName === "Today") {
+      Item.findByIdAndRemove(checkedItemId)
+        .then(function (item) {
+          if (item) {
+            console.log("Item removed successfully:", item);
+            res.redirect("/");
+          } else {
+            // Item not found
+            res.status(404).send("Item not found");
+          }
+        })
+        .catch(function (error) {
+          console.error(error);
+          // Handle error gracefully
+          res.status(500).send("Error occurred while removing item");
+        });
+    } else {
+      List.findOne({ name: listName })
+        .then(function (foundList) {
+          if (foundList) {
+            const listId = foundList._id;
+  
+            List.findByIdAndUpdate(
+              listId, 
+              { $pull: { items: { _id: checkedItemId } } }
+            )
+              .then(function (foundList) {
+                if (foundList) {
+                  console.log(`Item removed successfully from ${listName}`);
+                  res.redirect("/" + listName);
+                } else {
+                  // List not found
+                  res.status(404).send("List not found");
+                }
+              })
+              .catch(function (error) {
+                console.error(error);
+                // Handle error gracefully
+                res.status(500).send("Error occurred while removing item from list");
+              });
+          } else {
+            console.log("List not found");
+            res.status(404).send("List not found");
+          }
+        })
+        .catch(function (error) {
+          console.error(error);
+          // Handle error gracefully
+          res.status(500).send("Error occurred while finding list");
+        });
+    }
+  });  
 
-    res.redirect("/work");
+app.get("/:customListName", function (req, res) {
+    const listName = _.capitalize(req.params.customListName);
+
+    List.findOne({ name: listName })
+    .then(function (foundList) {
+      if (foundList) {
+        // List already exists
+        renderList(res, listName, foundList.items)
+      } else {
+        // List does not exist
+        const list = new List({
+            name: listName,
+            items: defaultItems
+        });
+
+        list.save();
+        res.redirect("/" + listName);
+      }
+    })
+    .catch(function (error) {
+      console.error("Error occurred:", error);
+    });
 });
 
 app.get("/about", function (req, res) {

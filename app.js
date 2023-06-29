@@ -2,6 +2,12 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const _ = require("lodash");
+const credentials = require('./credentials.js');
+const username = credentials.username;
+const password = credentials.password;
+
+// Use the credentials as needed
+console.log(apiKey, username, password);
 
 const app = express();
 
@@ -12,7 +18,7 @@ app.use(bodyParser.urlencoded({
 }));
 app.use(express.static("public"));
 
-mongoose.connect("mongodb://localhost:27017/todolistDB");
+mongoose.connect("mongodb+srv://username:password@cluster70613.wjqii0e.mongodb.net/todolistDB");
 
 const itemsSchema = {
     name: String

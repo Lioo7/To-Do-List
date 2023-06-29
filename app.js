@@ -6,9 +6,6 @@ const credentials = require('./credentials.js');
 const username = credentials.username;
 const password = credentials.password;
 
-// Use the credentials as needed
-console.log(apiKey, username, password);
-
 const app = express();
 
 app.set('view engine', 'ejs');
@@ -18,7 +15,7 @@ app.use(bodyParser.urlencoded({
 }));
 app.use(express.static("public"));
 
-mongoose.connect("mongodb+srv://username:password@cluster70613.wjqii0e.mongodb.net/todolistDB");
+mongoose.connect(`mongodb+srv://${username}:${password}@cluster70613.wjqii0e.mongodb.net/todolistDB`);
 
 const itemsSchema = {
     name: String
